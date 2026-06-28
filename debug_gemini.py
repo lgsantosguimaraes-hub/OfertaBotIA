@@ -1,33 +1,45 @@
 import os
+import asyncio
+import uvicorn
 from dotenv import load_dotenv
-import google.generativeai as genai
+from fastapi import FastAPI
+from telegram.ext import Application
 
-# Carrega as variáveis do seu arquivo .env
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
 
-print("=== DIAGNÓSTICO DO GEMINI ===")
+app_web = FastAPI()
 
-if not api_key:
-    print("❌ ERRO: Nenhuma chave encontrada na variável GEMINI_API_KEY do .env")
-else:
-    print(f"✅ Chave identificada: {api_key[:5]}...{api_key[-5:]}")
-    
-    genai.configure(api_key=api_key)
-    
-    try:
-        print("🔍 Perguntando ao Google quais modelos estão liberados para esta chave...")
-        modelos_encontrados = False
-        
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                print(f" 🟢 Modelo disponível: {m.name}")
-                modelos_encontrados = True
-                
-        if not modelos_encontrados:
-            print("⚠️ A chave é válida, mas a sua conta não tem NENHUM modelo de texto liberado.")
-            
-    except Exception as e:
-        print(f"\n❌ Falha grave de comunicação com o Google:\n{e}")
-        
-print("=============================")
+@app_web.get("/")
+async def read_root():
+    return {"status": "online", "bot": "OfertaBotIA"}
+
+async def run_web_server():
+    port = int(os.getenv("PORT", 10000))
+    config = uvicorn.Config(app=app_web, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+
+async def main():
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        print("❌ BOT_TOKEN não encontrado!")
+        return
+
+    print("🚀 Iniciando bot...")
+
+    application = Application.builder().token(token).build()
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(drop_pending_updates=True)
+
+    print("🤖 Bot do Telegram rodando!")
+    print("🌐 Servidor web iniciando...")
+
+    asyncio.create_task(run_web_server())
+
+    # Loop infinito forte
+    while True:
+        await asyncio.sleep(60)
+
+if __name__ == "__main__":
+    asyncio.run(main())
