@@ -1,7 +1,7 @@
+import asyncio
+from aiohttp import web
 import os
 import re
-import csv
-from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from telegram import Update
@@ -9,62 +9,45 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 from app.services.llm_service import LLMService
 
+# --- CONFIGURAÇÃO ---
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
 TOKEN = os.getenv("BOT_TOKEN")
 llm_service = LLMService()
 
-# --- FUNÇÕES ---
+# --- SERVIDOR WEB (PARA O RENDER) ---
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 10000)
+    await site.start()
+    print("🌐 Servidor web rodando na porta 10000")
+
+# --- FUNÇÕES DO BOT ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 **OfertaBot IA ativo!**\nEnvie links ou use /carregar para processar sua lista CSV.")
+    await update.message.reply_text(
+        "🚀 **OfertaBot IA ativo!**\n\n"
+        "Me envie o link de um produto e eu cuidarei da copy para você!"
+    )
 
 async def postar_oferta_agendada(context: ContextTypes.DEFAULT_TYPE):
-    link, nome = context.job.data
-    # Usamos o nome como contexto para a IA gerar uma copy melhor
-    copy = await llm_service.gerar_copy_venda(link, contextualizacao=nome)
+    link, contexto = context.job.data
+    copy = await llm_service.gerar_copy_venda(link, contexto)
     await context.bot.send_message(chat_id=context.job.chat_id, text=copy)
 
-async def carregar_lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lê o arquivo produtos.csv da raiz, verifica validade e agenda tudo"""
-    try:
-        caminho_arquivo = BASE_DIR / "produtos.csv"
-        hoje = datetime.now()
-        agendamento = 0
-        intervalo = 300 # 5 minutos
-        avisos = []
-        
-        with open(caminho_arquivo, mode='r', encoding='utf-8') as f:
-            leitor = csv.DictReader(f)
-            for linha in leitor:
-                # Extração de data e limpeza de nome
-                periodo_str = linha['Offer Period']
-                data_fim_str = periodo_str.split("end: ")[1].split("\n")[0].strip()
-                data_fim = datetime.strptime(data_fim_str, "%Y-%m-%d")
-                
-                dias_restantes = (data_fim - hoje).days
-                nome = linha['Offer Name'].replace("- - ", "").strip()
-                
-                # Alerta se expira em breve
-                if dias_restantes <= 3:
-                    avisos.append(f"⚠️ {nome} (Expira em {dias_restantes} dias)")
-                
-                # Agendamento
-                context.job_queue.run_once(
-                    postar_oferta_agendada, 
-                    agendamento, 
-                    chat_id=update.effective_chat.id, 
-                    data=(linha['Offer Link'], nome)
-                )
-                agendamento += intervalo
-        
-        if avisos:
-            await update.message.reply_text("🚨 **Atenção - Ofertas vencendo:**\n" + "\n".join(avisos))
-        await update.message.reply_text(f"✅ Lista carregada! Ofertas agendadas com sucesso.")
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Erro ao processar arquivo: {e}")
+async def agendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text("Uso: /agendar [segundos] [link] [contexto...]")
+        return
+    segundos = int(context.args[0])
+    link = context.args[1]
+    contexto = " ".join(context.args[2:])
+    context.job_queue.run_once(postar_oferta_agendada, segundos, chat_id=update.effective_chat.id, data=(link, contexto))
+    await update.message.reply_text(f"✅ Agendado para daqui a {segundos}s.")
 
 async def processar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text
@@ -81,16 +64,23 @@ async def processar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- INICIALIZAÇÃO ---
 
-def main():
-    print("🤖 Iniciando o OfertaBot IA com agendador...")
+async def main():
+    print("🤖 Iniciando o OfertaBot IA...")
+    
+    # 1. Inicia o servidor web em paralelo
+    await start_web_server()
+    
+    # 2. Configura o bot
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("carregar", carregar_lista))
+    app.add_handler(CommandHandler("agendar", agendar))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, processar_texto))
     
-    print("✅ Bot pronto! Pressione Ctrl+C para parar.")
-    app.run_polling()
+    print("✅ Bot rodando! Pressione Ctrl+C para parar.")
+    
+    # 3. Inicia o polling do Telegram
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
