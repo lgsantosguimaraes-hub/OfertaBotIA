@@ -3,7 +3,7 @@ import asyncio
 import uvicorn
 from fastapi import FastAPI
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente
@@ -29,13 +29,8 @@ async def run_web_server():
 
 # --- COMANDO PARA DESCOBRIR ID ---
 async def pegar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Envia o ID para o chat atual (pode ser privado ou canal)
     await update.message.reply_text(f"O ID deste chat é: {update.effective_chat.id}")
-
-# --- COMANDO PARA POSTAR NO CANAL (Exemplo) ---
-async def postar_no_canal(context: ContextTypes.DEFAULT_TYPE):
-    # Substitua pelo ID que você descobrir com o /meuid
-    ID_DO_CANAL = "-100XXXXXXXXXX" 
-    await context.bot.send_message(chat_id=ID_DO_CANAL, text="Teste de postagem automática!")
 
 async def main():
     token = os.getenv("TELEGRAM_TOKEN")
@@ -44,14 +39,18 @@ async def main():
         return
 
     # === CONFIGURAÇÃO DO BOT ===
+    # drop_pending_updates=True limpa mensagens antigas que causavam o erro de conflito
     application = Application.builder().token(token).build()
     
     # Handlers
     application.add_handler(CommandHandler("meuid", pegar_id))
     
-    # Inicialização
+    # Inicialização correta
     await application.initialize()
     await application.start()
+    
+    # Inicia o polling com limpeza de conflitos
+    print("🚀 Iniciando polling do bot...")
     await application.updater.start_polling(drop_pending_updates=True)
 
     # === INICIA O SERVIDOR WEB EM BACKGROUND ===
@@ -64,11 +63,16 @@ async def main():
     try:
         await asyncio.Event().wait()
     except asyncio.CancelledError:
-        # Shutdown gracioso
+        pass
+    finally:
+        # Shutdown gracioso para evitar conflitos futuros
+        await application.updater.stop()
         await application.stop()
         await application.shutdown()
         web_task.cancel()
-        await asyncio.gather(web_task, return_exceptions=True)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
