@@ -10,11 +10,18 @@ load_dotenv()
 
 app_web = FastAPI()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-# URL que o Render te deu (substitua pelo seu link do Render)
+# Verifique se esta URL está exatamente igual à do seu serviço no Render
 WEBHOOK_URL = "https://ofertabotia.onrender.com" 
 
-# --- CONFIGURAÇÃO DO BOT ---
 application = Application.builder().token(TOKEN).build()
+
+# Função que força o envio do ID
+async def pegar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    print(f"DEBUG: O ID do chat que enviou a mensagem é: {chat_id}")
+    await update.message.reply_text(f"O ID deste chat é: {chat_id}")
+
+application.add_handler(CommandHandler("meuid", pegar_id))
 
 @app_web.post("/webhook")
 async def webhook(request: Request):
@@ -28,20 +35,13 @@ async def read_root():
     return {"status": "online"}
 
 async def main():
-    # Configura o Webhook no Telegram
     bot = Bot(TOKEN)
+    # Tenta definir o webhook
     await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    
-    # Handlers
-    async def pegar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(f"O ID deste chat é: {update.effective_chat.id}")
-    
-    application.add_handler(CommandHandler("meuid", pegar_id))
     
     await application.initialize()
     await application.start()
 
-    # Roda o servidor Web usando o Uvicorn
     config = uvicorn.Config(app=app_web, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
     server = uvicorn.Server(config)
     
