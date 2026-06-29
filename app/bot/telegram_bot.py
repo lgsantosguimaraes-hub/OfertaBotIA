@@ -29,6 +29,9 @@ async def startup():
     bot = Bot(TOKEN)
     await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook", drop_pending_updates=True)
     print("✅ Webhook configurado e Bot iniciado com sucesso!")
+    webhook_info = await bot.get_webhook_info()
+    print(f"DEBUG: Webhook atual no Telegram: {webhook_info.url}")
+    print(f"DEBUG: Erro do último webhook: {webhook_info.last_error_message}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
