@@ -1,53 +1,165 @@
 import os
+import logging
+
 import uvicorn
-from fastapi import FastAPI, Request
-from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from telegram import Update
+from telegram.ext import Application, CommandHandler
 
 load_dotenv()
 
+# =====================================================
+# LOGS
+# =====================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+# =====================================================
+# CONFIG
+# =====================================================
+
+TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://ofertabotia.onrender.com").strip()
+
+if not TOKEN:
+    raise RuntimeError("TELEGRAM_TOKEN não encontrado.")
+
 app = FastAPI()
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = "https://ofertabotia.onrender.com"
 
-# Criando o bot sem polling
-application = Application.builder().token(TOKEN).updater(None).build()
+# =====================================================
+# APPLICATION (SEM POLLING)
+# =====================================================
 
-async def pegar_id(update, context):
+application = (
+    Application.builder()
+    .token(TOKEN)
+    .updater(None)
+    .build()
+)
+
+# =====================================================
+# COMANDOS
+# =====================================================
+
+async def pegar_id(update: Update, context):
     chat_id = update.effective_chat.id
-    print(f"✅ Comando /meuid processado! ID: {chat_id}")
-    await update.message.reply_text(f"O ID deste chat é: {chat_id}")
 
-# Por enquanto, SÓ o /meuid está ativo para capturarmos o ID
+    logger.info(f"ID capturado: {chat_id}")
+
+    await update.message.reply_text(
+        f"O ID deste chat é:\n\n{chat_id}"
+    )
+
 application.add_handler(CommandHandler("meuid", pegar_id))
+
+# =====================================================
+# STARTUP
+# =====================================================
 
 @app.on_event("startup")
 async def startup():
+
+    logger.info("=" * 60)
+    logger.info("Inicializando OfertaBotIA")
+    logger.info("=" * 60)
+
     await application.initialize()
-    await application.start() # <-- Isso liga o processamento do bot!
-    bot = Bot(TOKEN)
-    await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook", drop_pending_updates=True)
-    print("✅ Webhook configurado e Bot iniciado com sucesso!")
-    webhook_info = await bot.get_webhook_info()
-    print(f"DEBUG: Webhook atual no Telegram: {webhook_info.url}")
-    print(f"DEBUG: Erro do último webhook: {webhook_info.last_error_message}")
+
+    logger.info("Application inicializada.")
+
+    try:
+
+        logger.info("Removendo webhook antigo...")
+
+        await application.bot.delete_webhook(
+            drop_pending_updates=True
+        )
+
+        logger.info("Webhook antigo removido.")
+
+        logger.info("Criando novo webhook...")
+
+        ok = await application.bot.set_webhook(
+            url=f"{WEBHOOK_URL}/webhook",
+            drop_pending_updates=True,
+        )
+
+        logger.info(f"Webhook criado: {ok}")
+
+        info = await application.bot.get_webhook_info()
+
+        logger.info("========== WEBHOOK INFO ==========")
+        logger.info(f"URL: {info.url}")
+        logger.info(f"Pending: {info.pending_update_count}")
+        logger.info(f"Último erro: {info.last_error_message}")
+        logger.info(f"Max Connections: {info.max_connections}")
+        logger.info("=================================")
+
+    except Exception as e:
+        logger.exception("Erro ao configurar webhook.")
+
+# =====================================================
+# SHUTDOWN
+# =====================================================
+
+@app.on_event("shutdown")
+async def shutdown():
+
+    logger.info("Finalizando aplicação...")
+
+    await application.shutdown()
+
+# =====================================================
+# WEBHOOK
+# =====================================================
 
 @app.post("/webhook")
 async def webhook(request: Request):
+
     try:
+
         data = await request.json()
-        print(f"📥 Chegou do Telegram: {data}") # Log para vermos no Render
+
+        logger.info(f"Update recebido: {data}")
+
         update = Update.de_json(data, application.bot)
+
         await application.process_update(update)
-    except Exception as e:
-        print(f"❌ Erro no webhook: {e}")
-    return {"status": "ok"}
+
+    except Exception:
+        logger.exception("Erro ao processar update.")
+
+    return {"ok": True}
+
+# =====================================================
+# HEALTH CHECK
+# =====================================================
 
 @app.get("/")
 async def root():
-    return {"status": "online", "bot": "OfertaBotIA"}
+
+    return {
+        "status": "online",
+        "bot": "OfertaBotIA",
+    }
+
+# =====================================================
+# MAIN
+# =====================================================
 
 if __name__ == "__main__":
+
     port = int(os.getenv("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+    )
