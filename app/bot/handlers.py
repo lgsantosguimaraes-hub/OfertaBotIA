@@ -1,6 +1,7 @@
 import logging
 import csv
 import os
+import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -11,51 +12,62 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **OfertaBot IA Ativo!**\n\n"
-        "Use /carregar para processar as ofertas."
+        "/carregar - Enviar ofertas (com delay)\n"
+        "/adicionar Nome https://link - Nova oferta"
     )
 
 async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     csv_path = "produtos.csv"
-    
     if not os.path.exists(csv_path):
-        await update.message.reply_text("❌ Arquivo `produtos.csv` não encontrado na raiz.")
+        await update.message.reply_text("❌ produtos.csv não encontrado.")
         return
 
     try:
         count = 0
+        await update.message.reply_text("⏳ Iniciando envio de ofertas (5 minutos entre cada)...")
+
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 nome = row.get('Offer Name', row.get('nome', 'Produto')).strip()
                 link = row.get('Offer Link', row.get('link', '')).strip()
                 preco = row.get('preco', '').strip()
-                imagem = row.get('imagem', '').strip()
 
                 if not link or not nome:
                     continue
 
-                # Gera link de afiliado
                 link_afiliado = gerar_link_afiliado(link)
 
                 texto = f"🔥 **{nome}**"
                 if preco:
                     texto += f"\n💰 R$ {preco}"
-                texto += f"\n\n{link_afiliado}\n\n🛒 Aproveite esta oferta!"
+                texto += f"\n\n{link_afiliado}\n\n🛒 Aproveite!"
 
-                try:
-                    if imagem and imagem.startswith("http"):
-                        await update.message.reply_photo(photo=imagem, caption=texto)
-                    else:
-                        await update.message.reply_text(texto)
-                except Exception:
-                    await update.message.reply_text(texto)  # fallback sem imagem
-
+                await update.message.reply_text(texto)
                 count += 1
-                if count >= 10:  # limite de segurança
-                    break
 
-        await update.message.reply_text(f"✅ {count} ofertas enviadas com sucesso!")
-        logger.info(f"Processadas {count} ofertas.")
+                if count < 10:  # delay só entre as ofertas
+                    await asyncio.sleep(300)  # 5 minutos
+
+        await update.message.reply_text(f"✅ Concluído! {count} ofertas enviadas.")
     except Exception as e:
-        logger.error(f"Erro no /carregar: {e}")
-        await update.message.reply_text("❌ Erro ao processar as ofertas.")
+        logger.error(f"Erro: {e}")
+        await update.message.reply_text("❌ Erro ao processar ofertas.")
+
+async def adicionar_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        args = context.args
+        if len(args) < 2:
+            await update.message.reply_text("❌ Uso: /adicionar Nome https://link")
+            return
+
+        nome = " ".join(args[:-1])
+        link = args[-1]
+
+        with open("produtos.csv", "a", encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([nome, link, "", ""])
+
+        await update.message.reply_text(f"✅ Adicionado!\n**{nome}**")
+    except Exception as e:
+        await update.message.reply_text("❌ Erro ao adicionar.")
