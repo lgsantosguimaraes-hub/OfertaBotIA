@@ -1,20 +1,33 @@
-# app/bot/handlers.py
 import logging
+import csv
+import os
 from telegram import Update
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Olá! Bem-vindo ao OfertaBot IA\n\n"
-        "Use /meuid para testar o ID do chat.\n"
-        "Em breve mais comandos e ofertas automáticas."
-    )
+    await update.message.reply_text("🚀 OfertaBot IA Ativo!\nUse /carregar")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Comandos disponíveis:\n"
-        "/start - Iniciar o bot\n"
-        "/meuid - Ver ID do chat"
-    )
+async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    csv_path = "produtos.csv"
+    if not os.path.exists(csv_path):
+        await update.message.reply_text("❌ produtos.csv não encontrado.")
+        return
+
+    try:
+        count = 0
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                nome = row.get('nome', 'Produto')
+                link = row.get('link', row.get('url', ''))
+                if link:
+                    await update.message.reply_text(f"🔥 {nome}\n{link}")
+                    count += 1
+                if count >= 8:
+                    break
+        await update.message.reply_text(f"✅ {count} ofertas enviadas!")
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("❌ Erro ao ler CSV.")

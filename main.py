@@ -9,6 +9,9 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler
 
+# Import handlers
+from app.bot.handlers import start, carregar_ofertas
+
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
@@ -34,20 +37,18 @@ async def lifespan(app: FastAPI):
 
     await application.initialize()
 
+    # Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("carregar", carregar_ofertas))
+    application.add_handler(CommandHandler("meuid", lambda u, c: u.message.reply_text(f"ID: `{u.effective_chat.id}`", parse_mode="MarkdownV2")))
+
     try:
         await application.bot.delete_webhook(drop_pending_updates=True)
         webhook_url = f"{WEBHOOK_URL}/webhook"
         await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
         logger.info(f"✅ Webhook configurado: {webhook_url}")
     except Exception as e:
-        logger.exception("❌ Erro no webhook")
-
-    # Handler
-    async def pegar_id(update: Update, context):
-        chat_id = update.effective_chat.id
-        await update.message.reply_text(f"O ID deste chat é:\n\n`{chat_id}`", parse_mode="MarkdownV2")
-
-    application.add_handler(CommandHandler("meuid", pegar_id))
+        logger.exception("Erro ao configurar webhook")
 
     yield
     await application.shutdown()
@@ -61,7 +62,7 @@ async def telegram_webhook(request: Request):
         update = Update.de_json(data, app.state.application.bot)
         await app.state.application.process_update(update)
         return {"ok": True}
-    except Exception:
+    except Exception as e:
         logger.exception("Erro no webhook")
         return {"ok": False}
 
