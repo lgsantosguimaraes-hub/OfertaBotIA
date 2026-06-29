@@ -11,27 +11,34 @@ app = FastAPI()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = "https://ofertabotia.onrender.com"
 
-# A TRAVA DE SEGURANÇA: .updater(None) impede o erro de Conflict de existir!
+# Criando o bot sem polling
 application = Application.builder().token(TOKEN).updater(None).build()
 
 async def pegar_id(update, context):
-    await update.message.reply_text(f"O ID deste chat é: {update.effective_chat.id}")
+    chat_id = update.effective_chat.id
+    print(f"✅ Comando /meuid processado! ID: {chat_id}")
+    await update.message.reply_text(f"O ID deste chat é: {chat_id}")
 
+# Por enquanto, SÓ o /meuid está ativo para capturarmos o ID
 application.add_handler(CommandHandler("meuid", pegar_id))
 
 @app.on_event("startup")
 async def startup():
     await application.initialize()
+    await application.start() # <-- Isso liga o processamento do bot!
     bot = Bot(TOKEN)
-    # drop_pending_updates=True limpa a fila do Telegram na marra
     await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook", drop_pending_updates=True)
-    print("✅ Webhook configurado com sucesso!")
+    print("✅ Webhook configurado e Bot iniciado com sucesso!")
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
+    try:
+        data = await request.json()
+        print(f"📥 Chegou do Telegram: {data}") # Log para vermos no Render
+        update = Update.de_json(data, application.bot)
+        await application.process_update(update)
+    except Exception as e:
+        print(f"❌ Erro no webhook: {e}")
     return {"status": "ok"}
 
 @app.get("/")
