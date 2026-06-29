@@ -7,13 +7,12 @@ from telegram.ext import ContextTypes
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 **OfertaBot IA Ativo!**\nUse /carregar para ofertas.")
+    await update.message.reply_text("🚀 **OfertaBot IA Ativo!**\nUse /carregar")
 
 async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     csv_path = "produtos.csv"
-    
     if not os.path.exists(csv_path):
-        await update.message.reply_text("❌ Arquivo produtos.csv não encontrado.")
+        await update.message.reply_text("❌ produtos.csv não encontrado.")
         return
 
     try:
@@ -23,14 +22,24 @@ async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for row in reader:
                 nome = row.get('Offer Name', row.get('nome', 'Produto')).strip()
                 link = row.get('Offer Link', row.get('link', '')).strip()
-                if link and nome:
-                    await update.message.reply_text(f"🔥 **{nome}**\n{link}")
-                    count += 1
-                if count >= 10:
+                preco = row.get('preco', '').strip()
+                imagem = row.get('imagem', '').strip()
+
+                texto = f"🔥 **{nome}**"
+                if preco:
+                    texto += f"\n💰 R$ {preco}"
+                texto += f"\n\n{link}\n\n🛒 Aproveite!"
+
+                if imagem and imagem.startswith("http"):
+                    await update.message.reply_photo(photo=imagem, caption=texto)
+                else:
+                    await update.message.reply_text(texto)
+
+                count += 1
+                if count >= 8:
                     break
 
-        await update.message.reply_text(f"✅ {count} ofertas enviadas com sucesso!")
-        logger.info(f"Carregadas {count} ofertas.")
+        await update.message.reply_text(f"✅ {count} ofertas enviadas!")
     except Exception as e:
-        logger.error(f"Erro no carregar: {e}")
-        await update.message.reply_text(f"❌ Erro ao ler CSV: {str(e)[:100]}")
+        logger.error(f"Erro: {e}")
+        await update.message.reply_text("❌ Erro ao processar.")
