@@ -9,8 +9,8 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler
 
-# Import handlers
-from app.bot.handlers import start, carregar_ofertas
+# Imports dos handlers
+from app.bot.handlers import start, carregar_ofertas, adicionar_oferta
 
 load_dotenv()
 
@@ -37,9 +37,10 @@ async def lifespan(app: FastAPI):
 
     await application.initialize()
 
-    # Handlers
+    # Registra handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("carregar", carregar_ofertas))
+    application.add_handler(CommandHandler("adicionar", adicionar_oferta))
     application.add_handler(CommandHandler("meuid", lambda u, c: u.message.reply_text(f"ID: `{u.effective_chat.id}`", parse_mode="MarkdownV2")))
 
     try:
@@ -62,7 +63,7 @@ async def telegram_webhook(request: Request):
         update = Update.de_json(data, app.state.application.bot)
         await app.state.application.process_update(update)
         return {"ok": True}
-    except Exception as e:
+    except Exception:
         logger.exception("Erro no webhook")
         return {"ok": False}
 

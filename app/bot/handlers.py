@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **OfertaBot IA Ativo!**\n\n"
-        "/carregar - Enviar ofertas (com delay)\n"
+        "Comandos:\n"
+        "/carregar - Enviar ofertas\n"
         "/adicionar Nome https://link - Nova oferta"
     )
 
@@ -24,7 +25,7 @@ async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         count = 0
-        await update.message.reply_text("⏳ Iniciando envio de ofertas (5 minutos entre cada)...")
+        await update.message.reply_text("⏳ Iniciando envio (5 min entre cada)...")
 
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -46,13 +47,13 @@ async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(texto)
                 count += 1
 
-                if count < 10:  # delay só entre as ofertas
+                if count < 10:
                     await asyncio.sleep(300)  # 5 minutos
 
         await update.message.reply_text(f"✅ Concluído! {count} ofertas enviadas.")
     except Exception as e:
         logger.error(f"Erro: {e}")
-        await update.message.reply_text("❌ Erro ao processar ofertas.")
+        await update.message.reply_text("❌ Erro ao processar.")
 
 async def adicionar_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -69,5 +70,5 @@ async def adicionar_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
             writer.writerow([nome, link, "", ""])
 
         await update.message.reply_text(f"✅ Adicionado!\n**{nome}**")
-    except Exception as e:
+    except Exception:
         await update.message.reply_text("❌ Erro ao adicionar.")
