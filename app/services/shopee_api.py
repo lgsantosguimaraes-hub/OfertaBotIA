@@ -14,25 +14,24 @@ class ShopeeAPI:
 
     async def get_products(self, limit: int = 15) -> List[Dict]:
         if not self.partner_id or not self.token:
-            logger.error("Credenciais Shopee não configuradas no .env")
+            logger.error("Credenciais Shopee não configuradas!")
             return []
 
         query = """
         query {
-          search_products(
-            keyword: "",
-            limit: %d,
-            sort_by: "pop",
-            order_by: "desc"
+          productOfferV2(
+            listType: 0,
+            sortType: 5,
+            limit: %d
           ) {
-            items {
-              item_id
-              name
+            nodes {
+              itemId
+              productName
               price
-              original_price
-              discount
-              image
-              url
+              originalPrice
+              commissionRate
+              offerLink
+              productLink
             }
           }
         }
@@ -52,9 +51,9 @@ class ShopeeAPI:
                     headers=headers
                 ) as resp:
                     data = await resp.json()
-                    products = data.get("data", {}).get("search_products", {}).get("items", [])
-                    logger.info(f"✅ {len(products)} produtos obtidos da Shopee")
-                    return products
+                    nodes = data.get("data", {}).get("productOfferV2", {}).get("nodes", [])
+                    logger.info(f"✅ {len(nodes)} produtos obtidos da Shopee")
+                    return nodes
         except Exception as e:
             logger.error(f"Erro na API Shopee: {e}")
             return []
