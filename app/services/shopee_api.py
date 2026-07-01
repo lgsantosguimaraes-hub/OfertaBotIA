@@ -1,18 +1,22 @@
 import logging
 import aiohttp
-import json
+import os
 from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
 class ShopeeAPI:
     GRAPHQL_URL = "https://open-api.affiliate.shopee.com.br/graphql"
-    
-    def __init__(self):
-        self.session = None
 
-    async def get_products(self, limit: int = 20, category: str = None) -> List[Dict]:
-        """Busca produtos da Shopee via GraphQL"""
+    def __init__(self):
+        self.partner_id = os.getenv("SHOPEE_PARTNER_ID")
+        self.token = os.getenv("SHOPEE_AFFILIATE_TOKEN")
+
+    async def get_products(self, limit: int = 15) -> List[Dict]:
+        if not self.partner_id or not self.token:
+            logger.error("Credenciais Shopee não configuradas no .env")
+            return []
+
         query = """
         query {
           search_products(
@@ -28,18 +32,24 @@ class ShopeeAPI:
               original_price
               discount
               image
-              shop_id
               url
             }
           }
         }
         """ % limit
 
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+            "X-Partner-Id": self.partner_id
+        }
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.GRAPHQL_URL,
-                    json={"query": query}
+                    json={"query": query},
+                    headers=headers
                 ) as resp:
                     data = await resp.json()
                     products = data.get("data", {}).get("search_products", {}).get("items", [])
