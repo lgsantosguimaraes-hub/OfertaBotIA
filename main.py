@@ -9,8 +9,8 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler
 
-# Imports dos handlers
-from app.bot.handlers import start, carregar_ofertas, adicionar_oferta
+# Import handlers (versão estável)
+from app.bot.handlers import start, carregar_ofertas
 
 load_dotenv()
 
@@ -40,7 +40,6 @@ async def lifespan(app: FastAPI):
     # Registra handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("carregar", carregar_ofertas))
-    application.add_handler(CommandHandler("adicionar", adicionar_oferta))
     application.add_handler(CommandHandler("meuid", lambda u, c: u.message.reply_text(f"ID: `{u.effective_chat.id}`", parse_mode="MarkdownV2")))
 
     try:
