@@ -6,8 +6,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.services.shopee import gerar_link_afiliado
-from app.services.shopee_api import ShopeeAPI
-from app.utils.cache import is_product_sent, mark_product_sent
 
 logger = logging.getLogger(__name__)
 
@@ -15,38 +13,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **OfertaBot IA Ativo!**\n\n"
         "Comandos:\n"
-        "/carregar - Buscar novas ofertas\n"
-        "/adicionar Nome https://link - Adicionar manual"
+        "/carregar - Enviar ofertas\n"
+        "/adicionar Nome https://link - Adicionar nova oferta"
     )
 
 async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Buscando ofertas novas na Shopee...")
-
-    shopee = ShopeeAPI()
-    products = await shopee.get_products(limit=15)
-
-    if not products:
-        await update.message.reply_text("❌ Nenhuma oferta nova encontrada.")
+    csv_path = "produtos.csv"
+    if not os.path.exists(csv_path):
+        await update.message.reply_text("❌ produtos.csv não encontrado.")
         return
 
-    count = 0
-    for product in products:
-        item_id = str(product.get('item_id'))
-        nome = product.get('name', 'Produto')
-        link = product.get('url', '')
-        preco = product.get('price', 0)
+    try:
+        count = 0
+        await update.message.reply_text("⏳ Enviando ofertas do CSV...")
 
-        if not link or is_product_sent(item_id):
-            continue
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                nome = row.get('Offer Name', row.get('nome', 'Produto')).strip()
+                link = row.get('Offer Link', row.get('link', '')).strip()
+                preco = row.get('preco', '').strip()
 
-        link_afiliado = gerar_link_afiliado(link)
+                if not link or not nome:
+                    continue
 
-        texto = f"🔥 **{nome}**\n💰 R$ {preco:,}\n\n{link_afiliado}\n\n🛒 Aproveite!"
+                link_afiliado = gerar_link_afiliado(link)
 
-        await update.message.reply_text(texto)
-        mark_product_sent(item_id)
+                texto = f"🔥 **{nome}**"
+                if preco:
+                    texto += f"\n💰 R$ {preco}"
+                texto += f"\n\n{link_afiliado}\n\n🛒 Aproveite!"
 
-        count += 1
-        await asyncio.sleep(12)  # ~12 segundos entre posts
+                await update.message.reply_text(texto)
+                count += 1
+                await asyncio.sleep(12)  # delay entre posts
 
-    await update.message.reply_text(f"✅ {count} **novas** ofertas enviadas!")
+        await update.message.reply_text(f"✅ {count} ofertas enviadas com sucesso!")
+    except Exception as e:
+        logger.error(f"Erro no carregar: {e}")
+        await update.message.reply_text("❌ Erro ao processar CSV.")
+
+async def adicionar_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        args = context.args
+        if len(args) < 2:
+            await update.message.reply_text("❌ Uso: /adicionar Nome https://link")
+            return
+
+        nome = " ".join(args[:-1])
+        link = args[-1]
+
+        with open("produtos.csv", "a", encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([nome, link, "", ""])
+
+        await update.message.reply_text(f"✅ Oferta adicionada!\n**{nome}**")
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("❌ Erro ao adicionar oferta.")
