@@ -6,7 +6,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.services.shopee import gerar_link_afiliado
-from app.services.shopee_api import ShopeeAPI
 
 logger = logging.getLogger(__name__)
 
@@ -14,57 +13,65 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **OfertaBot IA Ativo!**\n\n"
         "Comandos:\n"
-        "/carregar - Buscar ofertas bonitas\n"
-        "/adicionar Nome https://link - Adicionar manual"
+        "/carregar - Enviar ofertas\n"
+        "/adicionar Nome https://link - Adicionar nova"
     )
 
 async def carregar_ofertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Buscando ofertas na Shopee...")
-
-    shopee = ShopeeAPI()
-    products = await shopee.get_products(limit=8)
-
-    if not products:
-        await update.message.reply_text("❌ Nenhuma oferta encontrada no momento.")
+    csv_path = "produtos.csv"
+    if not os.path.exists(csv_path):
+        await update.message.reply_text("❌ produtos.csv não encontrado.")
         return
 
-    count = 0
-    for product in products:
-        nome = product.get('productName', 'Produto Shopee')
-        link = product.get('offerLink', product.get('productLink', ''))
-        preco = product.get('price', 0)
-        original = product.get('originalPrice', 0)
-        imagem = product.get('image', '')
-        desconto = product.get('discount', '')
+    try:
+        count = 0
+        await update.message.reply_text("⏳ Enviando ofertas...")
 
-        if not link:
-            continue
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                nome = row.get('Offer Name', row.get('nome', 'Produto')).strip()
+                link = row.get('Offer Link', row.get('link', '')).strip()
+                preco = row.get('preco', '').strip()
 
-        link_afiliado = gerar_link_afiliado(link)
+                if not link or not nome:
+                    continue
 
-        # Monta legenda bonita
-        legenda = f"🔥 **{nome}**\n\n"
-        if original and original > preco:
-            legenda += f"💰 De: R$ {original:,}\n"
-            legenda += f"💸 Por: R$ {preco:,}\n"
-        else:
-            legenda += f"💰 R$ {preco:,}\n"
-        
-        if desconto:
-            legenda += f"🔥 {desconto}% OFF\n"
-        
-        legenda += f"\n{link_afiliado}\n\n"
-        legenda += "🛒 Aproveite! Entrega rápida."
+                link_afiliado = gerar_link_afiliado(link)
+                texto = f"🔥 **{nome}**"
+                if preco:
+                    texto += f"\n💰 R$ {preco}"
+                texto += f"\n\n{link_afiliado}\n\n🛒 Aproveite!"
 
-        try:
-            if imagem and imagem.startswith("http"):
-                await update.message.reply_photo(photo=imagem, caption=legenda)
-            else:
-                await update.message.reply_text(legenda)
-        except:
-            await update.message.reply_text(legenda)
+                await update.message.reply_text(texto)
+                count += 1
+                await asyncio.sleep(12)
 
-        count += 1
-        await asyncio.sleep(15)  # delay entre posts
+        await update.message.reply_text(f"✅ {count} ofertas enviadas!")
+    except Exception as e:
+        logger.error(f"Erro: {e}")
+        await update.message.reply_text("❌ Erro ao processar.")
 
-    await update.message.reply_text(f"✅ {count} ofertas bonitas enviadas!")
+async def adicionar_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        args = context.args
+        if len(args) < 2:
+            await update.message.reply_text("❌ Uso: /adicionar Nome https://link")
+            return
+
+        nome = " ".join(args[:-1])
+        link = args[-1]
+
+        with open("produtos.csv", "a", encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([nome, link, "", ""])
+
+        await update.message.reply_text(f"✅ Oferta adicionada!\n**{nome}**")
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("❌ Erro ao adicionar.")
+
+# Função chamada pelo scheduler automático
+async def carregar_ofertas_automatico():
+    logger.info("⏰ Executando postagem automática...")
+    # Por enquanto só loga (vamos ajustar para postar em canal)

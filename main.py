@@ -9,8 +9,8 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler
 
-# Import handlers (versão estável)
-from app.bot.handlers import start, carregar_ofertas
+from app.bot.handlers import start, carregar_ofertas, adicionar_oferta
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 load_dotenv()
 
@@ -37,10 +37,13 @@ async def lifespan(app: FastAPI):
 
     await application.initialize()
 
-    # Registra handlers
+    # Inicia scheduler automático
+    start_scheduler()
+
+    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("carregar", carregar_ofertas))
-    application.add_handler(CommandHandler("meuid", lambda u, c: u.message.reply_text(f"ID: `{u.effective_chat.id}`", parse_mode="MarkdownV2")))
+    application.add_handler(CommandHandler("adicionar", adicionar_oferta))
 
     try:
         await application.bot.delete_webhook(drop_pending_updates=True)
@@ -51,6 +54,8 @@ async def lifespan(app: FastAPI):
         logger.exception("Erro ao configurar webhook")
 
     yield
+
+    stop_scheduler()
     await application.shutdown()
 
 app = FastAPI(lifespan=lifespan)
