@@ -12,7 +12,7 @@ class ShopeeAPI:
         self.partner_id = os.getenv("SHOPEE_PARTNER_ID")
         self.token = os.getenv("SHOPEE_AFFILIATE_TOKEN")
 
-    async def get_products(self, limit: int = 15) -> List[Dict]:
+    async def get_products(self, limit: int = 10) -> List[Dict]:
         if not self.partner_id or not self.token:
             logger.error("Credenciais Shopee não configuradas!")
             return []
@@ -32,6 +32,8 @@ class ShopeeAPI:
               commissionRate
               offerLink
               productLink
+              image
+              discount
             }
           }
         }
@@ -52,7 +54,7 @@ class ShopeeAPI:
                 ) as resp:
                     data = await resp.json()
                     nodes = data.get("data", {}).get("productOfferV2", {}).get("nodes", [])
-                    logger.info(f"✅ {len(nodes)} produtos obtidos da Shopee")
+                    logger.info(f"✅ {len(nodes)} produtos obtidos")
                     return nodes
         except Exception as e:
             logger.error(f"Erro na API Shopee: {e}")
